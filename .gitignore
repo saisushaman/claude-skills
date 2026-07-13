@@ -1,0 +1,4 @@
+# Transient per-run artifacts skills may write to the scratchpad
+cycle-*.json
+*.tmp
+.DS_Store
