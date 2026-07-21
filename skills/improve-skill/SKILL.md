@@ -31,10 +31,14 @@ net improvement with the deterministic comparison — never by asserting the pro
 reliability, correctness, consistency, and robustness is.
 
 Reuse grade-skill's scripts (they are a matched pair, installed side by side).
-From this skill, reference them at the sibling path:
-`../grade-skill/scripts/<name>.py` (in this repo) or
-`~/.claude/skills/grade-skill/scripts/<name>.py` (when installed). Resolve once
-at the start and reuse.
+Resolve their location once at the start and reuse it. Look, in order, for the
+sibling grade-skill directory:
+`../grade-skill/scripts/<name>.py` (in this repo),
+`~/.claude/skills/grade-skill/scripts/<name>.py` (when installed directly), or
+`~/.claude/skills/agent-sync-grade-skill/scripts/<name>.py` (when installed via
+agent-sync, which prefixes rendered skill names with `agent-sync-`). If none
+resolve, locate the grade-skill/agent-sync-grade-skill directory and use its
+`scripts/`.
 
 ## Prerequisites
 - `python` on PATH. No third-party packages.
