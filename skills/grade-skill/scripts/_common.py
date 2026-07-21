@@ -202,11 +202,27 @@ def extract_references(skill_dir: Path, body: str) -> list[dict]:
             return
         if raw.startswith(("/", "~")) or re.match(r"^[A-Za-z]:", raw):
             return  # absolute — not a bundled relative resource
+        # Template placeholders / globs (`<name>.py`, `{skill_dir}`, `foo/*`) are
+        # illustrative, not real files — never treat them as (broken) references.
+        if any(ch in raw for ch in "<>{}*"):
+            return
+        # A parent-escaping path (`../grade-skill/scripts/x`) is a cross-skill
+        # mention, not a file this skill bundles — don't validate it as one.
+        if raw.startswith("../"):
+            return
         # strip anchors / line suffixes like file.md#foo or file.py:12
         clean = raw.split("#", 1)[0]
         clean = re.sub(r":\d+$", "", clean)
         if not clean or clean in refs:
             return
+        # For backticked paths (a weaker signal than a markdown link), only treat
+        # them as this skill's own resource if it actually bundles that top-level
+        # dir. A meta-skill mentioning `tests/manifest.json` when it has no tests/
+        # dir is talking about *another* skill's file, not a broken local one.
+        if kind == "backtick-path":
+            top = clean.split("/", 1)[0]
+            if not (skill_dir / top).is_dir():
+                return
         target = (skill_dir / clean).resolve()
         refs[clean] = {
             "ref": clean,
