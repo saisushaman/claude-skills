@@ -1,0 +1,70 @@
+{
+  "version": "1.0",
+  "description": "Deterministic behavioral tests for grade-skill's bundled scripts. These exercise the real script contracts end-to-end without an LLM, so grade-skill has genuine (not merely documented) testability. Placeholders {python} {skill_dir} {scripts} {fixtures} are substituted by run-tests.py.",
+  "tests": [
+    {
+      "id": "validate-good-skill-clean",
+      "type": "command",
+      "description": "A well-formed skill validates clean (ok=true, exit 0).",
+      "argv": ["{python}", "{scripts}/validate-skill.py", "{fixtures}/good-skill"],
+      "expect_exit": 0,
+      "expect_stdout_contains": ["\"ok\": true", "\"error_count\": 0"]
+    },
+    {
+      "id": "validate-broken-skill-flags-errors",
+      "type": "command",
+      "description": "A broken skill is flagged (missing description + broken reference) and exits non-zero.",
+      "argv": ["{python}", "{scripts}/validate-skill.py", "{fixtures}/broken-skill"],
+      "expect_exit": 1,
+      "expect_stdout_contains": ["missing-description", "broken-reference", "\"ok\": false"]
+    },
+    {
+      "id": "discover-good-skill-inventory",
+      "type": "command",
+      "description": "Discovery resolves the skill and reports its name + frontmatter.",
+      "argv": ["{python}", "{scripts}/discover-skill.py", "{fixtures}/good-skill"],
+      "expect_exit": 0,
+      "expect_stdout_contains": ["\"name\": \"good-skill\"", "\"broken_references\": []"]
+    },
+    {
+      "id": "compare-accept-on-improvement",
+      "type": "command",
+      "description": "Genuine improvement (behavioral up, no new criticals) -> ACCEPT / exit 0.",
+      "argv": ["{python}", "{scripts}/compare-reports.py", "{fixtures}/report-old.json", "{fixtures}/report-new-improved.json"],
+      "expect_exit": 0,
+      "expect_stdout_contains": ["Verdict: **ACCEPT**"]
+    },
+    {
+      "id": "compare-reject-on-behavioral-regression",
+      "type": "command",
+      "description": "Design score rises but behavioral reliability drops 90->61 -> REJECT / exit 1. This guards the core design principle.",
+      "argv": ["{python}", "{scripts}/compare-reports.py", "{fixtures}/report-old.json", "{fixtures}/report-new-regression.json"],
+      "expect_exit": 1,
+      "expect_stdout_contains": ["Verdict: **REJECT**", "behavioral reliability regressed"]
+    },
+    {
+      "id": "score-results-computes-behavioral",
+      "type": "command",
+      "description": "score-results maps pass_rate 0.875 -> behavioral_reliability 87.5.",
+      "argv": ["{python}", "{scripts}/score-results.py", "{fixtures}/test-results.json"],
+      "expect_exit": 0,
+      "expect_stdout_contains": ["\"behavioral_reliability\": 87.5"]
+    },
+    {
+      "id": "self-validate-grade-skill",
+      "type": "command",
+      "description": "grade-skill validates itself clean (no broken references, valid frontmatter). Catches accidental self-breakage.",
+      "argv": ["{python}", "{scripts}/validate-skill.py", "{skill_dir}"],
+      "expect_exit": 0,
+      "expect_stdout_contains": ["\"ok\": true"]
+    },
+    {
+      "id": "save-report-round-trip",
+      "type": "command",
+      "description": "save-report computes derived scores and writes artifacts to a temp reports root.",
+      "argv": ["{python}", "{scripts}/save-report.py", "{fixtures}/assessment-min.json", "--reports-root", "{tests}/_tmp_reports"],
+      "expect_exit": 0,
+      "expect_stdout_contains": ["\"saved\": true", "\"design_quality\": 62.5", "\"scoring_mode\": \"static-analysis\""]
+    }
+  ]
+}

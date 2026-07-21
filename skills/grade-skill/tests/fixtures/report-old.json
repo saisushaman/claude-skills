@@ -1,0 +1,9 @@
+{
+  "skill": "fixture",
+  "evaluated_at": "2026-01-01T00:00:00Z",
+  "overall_score": 83.7,
+  "design_quality": 74.2,
+  "behavioral_reliability": 90,
+  "severity_counts": {"P0": 0, "P1": 0, "P2": 1, "P3": 0},
+  "tests": {"total": 10, "passed": 9, "failed": 1, "skipped": 0, "pass_rate": 0.9}
+}

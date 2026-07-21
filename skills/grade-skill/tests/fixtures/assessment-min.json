@@ -1,0 +1,34 @@
+{
+  "skill": "fixture-roundtrip",
+  "confidence": "MEDIUM",
+  "recommendation": "Fixture assessment for save-report round-trip test.",
+  "overall_assessment": "Fixture.",
+  "skill_contract": "Given X, produce Y.",
+  "scores": {
+    "purpose_clarity": 8,
+    "instruction_clarity": 7,
+    "instruction_completeness": 6,
+    "instruction_consistency": 7,
+    "output_specification": 4,
+    "input_handling": 6,
+    "error_handling": 5,
+    "edge_case_coverage": 5,
+    "tool_resource_reliability": 8,
+    "context_efficiency": 7,
+    "maintainability": 7,
+    "testability": 5
+  },
+  "behavioral_reliability": null,
+  "issues": [
+    {"severity": "P1", "category": "output_specification", "evidence_type": "DOCUMENTED", "problem": "No output schema", "why": "Callers cannot rely on shape", "evidence": "SKILL.md omits it", "fix": "Add an output contract"}
+  ],
+  "strengths": ["Clear purpose"],
+  "ambiguities": [],
+  "missing_instructions": [],
+  "conflicting_instructions": [],
+  "edge_cases": [],
+  "redundant_instructions": [],
+  "top_improvements": [
+    {"title": "Add output contract", "impact": "High", "effort": "Low", "regression_risk": "Low"}
+  ]
+}

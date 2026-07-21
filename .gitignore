@@ -2,3 +2,10 @@
 cycle-*.json
 *.tmp
 .DS_Store
+
+# grade-skill test suite scratch output (save-report round-trip test)
+skills/grade-skill/tests/_tmp_reports/
+
+# Python bytecode
+__pycache__/
+*.pyc

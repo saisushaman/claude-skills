@@ -1,0 +1,9 @@
+{
+  "skill": "fixture",
+  "total": 8,
+  "passed": 7,
+  "failed": 1,
+  "skipped": 2,
+  "pass_rate": 0.875,
+  "results": []
+}
