@@ -1,0 +1,48 @@
+{
+  "version": "1.0",
+  "description": "Deterministic tests for pr-review-bot's bundled scripts. The pure helpers (target parsing) run offline; the gh/GraphQL-dependent exit-code contracts require auth + a real PR and are declared manual (SKIPPED, never counted as passed). Placeholders {scripts} are substituted by run-tests.py. Requires bash on PATH.",
+  "tests": [
+    {
+      "id": "parse-target-url",
+      "type": "command",
+      "description": "prb_parse_target extracts owner/repo/number from a PR URL.",
+      "argv": ["bash", "-c", "source '{scripts}/_lib.sh'; prb_parse_target 'https://github.com/octo/repo/pull/12'"],
+      "expect_exit": 0,
+      "expect_stdout_contains": ["octo repo 12"]
+    },
+    {
+      "id": "parse-target-three-args",
+      "type": "command",
+      "description": "prb_parse_target passes through the explicit owner/repo/number form.",
+      "argv": ["bash", "-c", "source '{scripts}/_lib.sh'; prb_parse_target acme widgets 5"],
+      "expect_exit": 0,
+      "expect_stdout_contains": ["acme widgets 5"]
+    },
+    {
+      "id": "parse-target-url-no-scheme",
+      "type": "command",
+      "description": "prb_parse_target tolerates a scheme-less github.com URL.",
+      "argv": ["bash", "-c", "source '{scripts}/_lib.sh'; prb_parse_target 'github.com/o/r/pull/7'"],
+      "expect_exit": 0,
+      "expect_stdout_contains": ["o r 7"]
+    },
+    {
+      "id": "parse-target-rejects-garbage",
+      "type": "command",
+      "description": "prb_parse_target fails loudly (exit != 0) on an unparseable target.",
+      "argv": ["bash", "-c", "source '{scripts}/_lib.sh'; prb_parse_target 'not-a-pr-url'"],
+      "expect_exit": 1,
+      "expect_stdout_not_contains": ["pull"]
+    },
+    {
+      "id": "fetch-pr-exit-codes-live",
+      "type": "manual",
+      "description": "Requires gh auth + real PRs: fetch-pr.sh returns 2 on a merged PR, 3 on closed, 4 on an own PR (PRB_ME_OVERRIDE=<author>), 5 when PRB_REPO_ALLOWLIST excludes the repo, 0 otherwise. Run by hand against a known PR."
+    },
+    {
+      "id": "check-addressed-approve-live",
+      "type": "manual",
+      "description": "Requires gh auth + a real reviewed PR: check-addressed.sh returns 0 when all bot threads resolved, 2 (PRB_REASON=...) otherwise; approve.sh posts an APPROVE-only review. Run by hand."
+    }
+  ]
+}

@@ -32,9 +32,9 @@ Edit the defaults here to hard-wire your environment.
 | `SLACK_CHANNEL` | `#your-review-channel` → `C0XXXXXXXXX` | The ONE channel this bot polls. Do not read or post anywhere else. |
 | `CLAIM_EMOJI` | `eyes` | Reaction that marks a PR "claimed / in progress". Presence = skip. NOTE: humans in this channel also use `:eyes:` by hand, so any human-eyed message is treated as already claimed and skipped — that is intended. |
 | `DONE_EMOJI` | `white_check_mark` | Reaction added when the review is posted. |
-| `REPO_ALLOWLIST` | *(empty = all your-org repos)* | Optional list of `owner/repo` the bot may review. A PR outside it is skipped and noted in-thread. |
-| `SKIP_OWN_PRS` | `true` | This bot reviews **OTHERS'** PRs only. If the PR author is the gh-authenticated user (you), **skip entirely** — no review, no GitHub post, no findings. Standing rule: you don't review your own PRs. |
-| `REVIEW_EVENT` | `COMMENT` | GitHub review event. Keep `COMMENT` — a bot must not `APPROVE`/`REQUEST_CHANGES`. |
+| `REPO_ALLOWLIST` | *(empty = all your-org repos)* | Optional list of `owner/repo` the bot may review. A PR outside it is skipped and noted in-thread. The bundled scripts read this from env var **`PRB_REPO_ALLOWLIST`** (space/comma-separated). |
+| `SKIP_OWN_PRS` | `true` | This bot reviews **OTHERS'** PRs only. If the PR author is the gh-authenticated user (you), **skip entirely** — no review, no GitHub post, no findings. Standing rule: you don't review your own PRs. Scripts read env var **`PRB_SKIP_OWN_PRS`**; override the identity used for this gate with **`PRB_ME_OVERRIDE`** (e.g. a service account). |
+| `REVIEW_EVENT` | `COMMENT` | GitHub review event for the **review pass** (Steps 1-9). Always `COMMENT` — the review pass never `APPROVE`s or `REQUEST_CHANGES`. The bot may `APPROVE` **only** later, via the gated follow-up mode (see "Follow-up / approval mode"), and never `REQUEST_CHANGES` or merge at all. |
 | `SLA_MINUTES` | `15` | Per-review completion window: target 10 min, **15 hard ceiling**. If a single PR can't finish in time, post what's confirmed and flag the rest in-thread. |
 
 ---
@@ -113,21 +113,26 @@ Run these steps in order. A review should complete within `SLA_MINUTES`
 - Process **one PR per pass** by default (keeps each pass inside the SLA and makes
   the loop naturally fair). Set args to allow more if needed.
 
-### Step 4 — Fetch PR data (GitHub)
+### Step 4 — Fetch PR data + gates (GitHub) — run the script, don't hand-roll gh
+Run the bundled deterministic fetcher; it does the metadata fetch, the diff, and
+**every non-judgment gate** (state / own-PR / allowlist) so you never re-derive
+these `gh` calls by hand:
 ```
-gh pr view  <n> --repo <owner>/<repo> --json title,body,author,state,additions,deletions,changedFiles,baseRefName,headRefName,headRefOid
-gh pr diff  <n> --repo <owner>/<repo>
+bash scripts/fetch-pr.sh <pr-url>          # or: bash scripts/fetch-pr.sh <owner> <repo> <number>
 ```
-- **Own-PR skip (`SKIP_OWN_PRS`):** compare the PR author (`.author.login`) to the
-  gh-authenticated user (`gh api user -q .login`). If they match, this is YOUR own
-  PR — **do not review it.** Post a one-line thread note ("Skipping — bot doesn't
-  review its owner's PRs"), leave the `:eyes:`/`:white_check_mark:` so it isn't
-  re-picked, and stop. The bot only reviews OTHER people's PRs.
-- Capture `headRefOid` — inline comments MUST be anchored to this commit.
-- If the diff is large, fetch changed-file contents at `headRefOid` as needed to
-  compute exact line numbers (see references/github-review.md).
-- Enforce `REPO_ALLOWLIST` here; if the repo isn't allowed, reply in-thread that it
-  was skipped and stop.
+Env it honors: `PRB_REPO_ALLOWLIST`, `PRB_SKIP_OWN_PRS` (default `true`),
+`PRB_ME_OVERRIDE`. **Branch on its exit code:**
+- `0` — reviewable. stdout is the metadata block (`PRB_HEAD_OID=…` etc.), then
+  `--- BODY ---`, then `--- DIFF ---` and the full diff. `PRB_HEAD_OID` is the
+  commit inline comments MUST anchor to. Proceed to Step 5.
+- `2` MERGED · `3` CLOSED · `4` own-PR skip · `5` repo not in allowlist — **not
+  reviewable.** stdout carries a one-line reason; reply that line in-thread, leave
+  the `:eyes:`/`:white_check_mark:` so it isn't re-picked, and stop.
+- `1` — error (bad args / gh failure); stderr has detail. Treat as a Step-4
+  failure (see Failure handling).
+
+If the diff is large, fetch changed-file contents at `PRB_HEAD_OID` as needed to
+compute exact line numbers (see `references/github-review.md`).
 
 ### Step 5 — Review across the five vectors
 Analyze the diff (and surrounding code where needed) against all five. This is an
@@ -163,17 +168,24 @@ IaC / Entra ID bot, so weight security and architecture heavily.
 - If nothing meets the bar, that is a valid result: post a clean review with no
   inline comments and say so.
 
-### Step 7 — Post the GitHub review (inline comments)
+### Step 7 — Post the GitHub review (inline comments) — via the script
 (Own PRs were already skipped in Step 4, so anything reaching here is someone
-else's PR.) Post one review with all inline comments in a single API call. Each
-comment body is prefixed with its severity, e.g. `**[High]** …`. See
-`references/github-review.md` for the exact payload, line-anchoring rules, and the
-Windows scratchpad-file gotcha. In short:
-- Build a `reviews` payload: `commit_id` = `headRefOid`, `event` = `REVIEW_EVENT`,
-  a short `body` summary (counts by severity + overall read), and a `comments[]`
-  array of `{path, line, side:"RIGHT", body}`.
-- Write it to a file in the scratchpad dir and POST with
-  `gh api repos/<owner>/<repo>/pulls/<n>/reviews --method POST --input <file>`.
+else's PR.) You supply **only your judgment** as a findings file; the script
+injects the deterministic bits (`commit_id` = head OID, the fixed `event=COMMENT`)
+and POSTs atomically — so you never hand-build the envelope or trip the Windows
+`gh --input` path gotcha. Write a findings JSON:
+```json
+{ "body": "<severity tally + overall read>",
+  "comments": [ { "path": "...", "line": 23, "side": "RIGHT", "body": "**[High]** ..." } ] }
+```
+then:
+```
+bash scripts/post-review.sh <findings.json> <pr-url>
+```
+Exit `0` prints the review's `html_url` (use it in the Step-8 Slack reply); exit
+`1` is an error on stderr (a bad path/line 422s the whole review — re-verify
+anchors against the head file). Payload/line-anchoring details:
+`references/github-review.md`.
 
 ### Step 8 — Notify Slack + finalize the lock
 - Reply **in the triggering message's thread** with
@@ -212,6 +224,26 @@ works today without the Slack connector, and it's how the bot was validated on
 <repo-a> PRs #16 and #20.
 
 ---
+
+## Follow-up / approval mode
+A separate, opt-in capability for a PR the bot **already reviewed**: re-check it
+and `APPROVE` once the findings are addressed. This is the only place the bot
+approves; it **never** `REQUEST_CHANGES`, closes, or merges.
+
+Trigger it explicitly (e.g. `/pr-review-bot approve <pr-url>`), not from the
+Step 1 poll. Sequence:
+1. **Mechanical gate (script):** `bash scripts/check-addressed.sh <pr-url>`.
+   - Exit `0` — mechanically approvable: PR still OPEN, ≥1 bot finding thread
+     exists, and all bot threads are resolved (a clean 0-finding review is never
+     auto-approved). Continue to step 2.
+   - Exit `2` — not yet; stdout is `PRB_REASON=<why>` (unresolved threads, already
+     approved, clean review, or PR not open). Reply that reason in-thread and stop.
+   - Exit `1` — error on stderr.
+2. **Judgment checks (you, not the script):** confirm there is a Slack "addressed"
+   reply from a human, spot-check that the fixes are real (not just threads marked
+   resolved), and that no competing duplicate PR supersedes this one.
+3. **Approve (script):** `bash scripts/approve.sh <pr-url>` — posts an APPROVE
+   review only. Exit `0` = approved; `1` = error.
 
 ## Running it as a loop
 This skill is one pass. Drive repetition with one of:
